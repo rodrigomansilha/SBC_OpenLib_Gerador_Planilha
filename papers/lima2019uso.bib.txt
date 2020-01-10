@@ -1,0 +1,12 @@
+@inproceedings{lima2019uso,
+    author = {Pablo de Andrades Lima and Jean Lucas Cimirro and Erico Amaral and Gerson Munhos},
+    title = {{Uso de ferramentas digitais no combate a disseminação das fakes news}},
+    booktitle = {4o Workshop Regional de Segurança da Informação e de Sistemas Computacionais },
+    address = {Alegrete-RS, Brasil},
+    days = {16-19},
+    month = {sep},
+    year = {2019},
+    abstract = {O trabalho apresenta uma revisão literária para buscar, analisar e verificar as formas de disseminação e as tecnologias usadas no combate as notícias falsas. Foram incluídos no estudo, artigos de pesquisa brasileiros sobre o tema, que resultaram na investigação de dois problemas: O uso de robôs sociais/digitais e influência do filtro bolha no direcionamento dos acessos e como parte da solução do problema a verificação das fakes news com uso de deep learning. As pesquisas citadas mostram um tendência promissora de evolução no combate às fake news utilizando o padrão automatizado de machine learning e inteligência humana para diferenciar robôs de pessoas além de outras ações no combate a fake news como fact checking, o uso de leis punitivas e o delicado conflito entre o combate às fake news e o respeito e a liberdade de expressão, onde planos legais nacionais, sob a justificativa de combater notícias falsa possam violar esta autonomia. Após a análise dos artigos enquadrados no escopo da pesquisa, pode-se verificar a dificuldade no tratamento de notícias falsas nos meios digitais atuais como redes sociais devidas a complexidade na classificação das notícias e interesses mercadológicos que utilizam ferramentas de disseminação de conteúdo robotizados. Muito embora hajam técnicas avançadas de inteligência artificial capazes de reduzir, ainda não existem ferramentas totalmente funcionais e práticas no combate às fake news, sendo ainda a conscientização dos usuários a melhor forma de prevenção.},
+    keywords = {Análise de códigos maliciosos; Autenticação e gestão de identidades; Gestão de segurança da informação; Incidentes de segurança: prevenção, detecção e resposta; Segurança em aplicações (redes sociais, IoT, ...)},
+    url = {http://errc.sbc.org.br/2019/wrseg/papers/lima2019uso.pdf},
+} 

@@ -1,0 +1,13 @@
+@inproceedings{fritsch2019anlise,
+    author = {Luiz Fritsch and Giulliano Paz and Rodrigo Machado and Diego Kreutz},
+    title = {{Análise do Impacto de Funções Criptográficas no Desempenho do Google BigQuery}},
+    booktitle = {4o Workshop Regional de Segurança da Informação e de Sistemas Computacionais },
+    address = {Alegrete-RS, Brasil},
+    days = {16-19},
+    month = {sep},
+    year = {2019},
+    abstract = {Casos de vazamentos de dados têm aparecido na mídia com frequência. Muitos destes casos poderiam ter sido evitados ou amenizados com a utilização de sistemas de armazenamento de dados com suporte à criptografia, como o BigQuery da Google. Neste trabalho, testamos o impacto da utilização de funções criptográficas no desempenho do Google BigQuery. Utilizando a linguagem de programação Python, foram realizadas operações de criação de tabelas, inserção e seleção de dados de clientes fictícios. Como forma de comparação, os mesmo dados foram utilizados de forma cifrada e em texto plano. Ao fim do experimento, pôde-se constatar que a utilização de funções criptográficas afeta consideravelmente o tempo de execução das consultas. Isso deve-se ao processo de codificação, na inserção de dados, e decodificação, na seleção de dados.},
+    keywords = {Incidentes de segurança: prevenção, detecção e resposta; Segurança em aplicações (redes sociais, IoT, ...); Software seguro: desenvolvimento, testes e certificação},
+    url = {http://errc.sbc.org.br/2019/wrseg/papers/fritsch2019anlise.pdf},
+} 
+
