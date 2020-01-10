@@ -130,11 +130,8 @@ class Autor(object):
 
 class Artigo(object):
 
-	seq_contador = 0
-
-	def __init__(self, language_, sectionAbbrev_, bib_database_= None):
-		Artigo.seq_contador += 1
-		self.seq = Artigo.seq_contador
+	def __init__(self, language_, sectionAbbrev_, seq_, bib_database_= None):
+		self.seq = seq_
 		self.language = language_
 		self.sectionAbbrev = sectionAbbrev_
 		self.title = ""
@@ -287,6 +284,23 @@ def gera_workbook_planilha(nome_arquivo_, acrescentar_=True):
 
 	return workbook, planilha
 
+def le_seq_artigo(nome_arquivo_, acrescentar_=True):
+	logging.debug("le_seq_artigo  nome_arquivo_:%s acrescentar_:%s" % (nome_arquivo_, acrescentar_))
+	if not acrescentar_ or not Path(nome_arquivo_).is_file():
+		seq_artigo = 1
+	else:
+		workbook = load_workbook(nome_arquivo_)
+		planilha = workbook[PLANILHA_PADRAO]
+		coluna = 1
+		linha = 1
+		logging.debug("Linha: %d Valor:%s" % (linha, planilha.cell(row=linha, column=coluna).value))
+		while not planilha.cell(row=linha, column=coluna).value is None:
+			logging.debug("Linha: %d Valor:%s" % (linha, planilha.cell(row=linha, column=coluna).value))
+			linha += 1
+
+		seq_artigo = linha -1 # descontar o cabeçalho
+
+	return seq_artigo
 
 def main():
 	'''
@@ -336,11 +350,8 @@ def main():
 	logging.info("PARÂMETROS CALCULADOS")
 	logging.info("---------------------")
 
-	# arquivos_bib = [arquivo for arquivo in Path(args.dir).rglob('[!~]*.bib')]
-	# logging.info("\tbibs   : %s" % arquivos_bib)
-
 	arquivos_pdfs = [arquivo for arquivo in Path(args.dir).rglob('[!~]*.pdf')]
-	logging.info("\tpdfs   : %s" % arquivos_pdfs)
+	logging.info("\tpdfs       : %s" % arquivos_pdfs)
 
 	# inicializa variáveris
 	artigos = []
@@ -352,6 +363,7 @@ def main():
 	logging.info("----------------")
 
 	try:
+		sequencia = le_seq_artigo(args.artigos, args.acrescentar)
 		for posix_path_pdf in arquivos_pdfs:
 			conta_arquivo += 1
 
@@ -368,7 +380,8 @@ def main():
 				parser.customization = convert_to_unicode
 				bibtex_file = open(nome_arquivo_bib)
 				bib_database = bibtexparser.load(bibtex_file, parser=parser)
-				artigo = Artigo(LANGUAGE_PADRAO, args.secao, bib_database)
+				artigo = Artigo(LANGUAGE_PADRAO, args.secao, sequencia, bib_database)
+				sequencia += 1
 				logging.info(artigo)
 				artigos.append(artigo)
 
