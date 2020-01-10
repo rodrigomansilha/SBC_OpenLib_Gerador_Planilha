@@ -130,10 +130,10 @@ class Autor(object):
 
 class Artigo(object):
 
-	def __init__(self, language_, sectionAbbrev_, seq_, bib_database_= None):
+	def __init__(self, language_, section_abbrev_, seq_, bib_database_= None):
 		self.seq = seq_
 		self.language = language_
-		self.sectionAbbrev = sectionAbbrev_
+		self.sectionAbbrev = section_abbrev_
 		self.title = ""
 		self.titleEn = ""
 		self.abstract = ""
@@ -157,7 +157,8 @@ class Artigo(object):
 			self.fileLink = bib_database_.entries[0]["url"]
 
 			conta_autor = 0
-			autores_lista = bib_database_.entries[0]["author"].split("and")
+			autores_lista = bib_database_.entries[0]["author"].split(" and ")
+			logging.debug(autores_lista)
 			for autor_str in autores_lista:
 				conta_autor += 1
 				autor_str = autor_str.strip()
@@ -165,6 +166,7 @@ class Artigo(object):
 				autor = Autor(self.seq, autor_str)
 				logging.debug(autor)
 				self.autores.append(autor)
+
 
 	def __str__(self):
 		msg = "\n"
@@ -284,6 +286,7 @@ def gera_workbook_planilha(nome_arquivo_, acrescentar_=True):
 
 	return workbook, planilha
 
+
 def le_seq_artigo(nome_arquivo_, acrescentar_=True):
 	logging.debug("le_seq_artigo  nome_arquivo_:%s acrescentar_:%s" % (nome_arquivo_, acrescentar_))
 	if not acrescentar_ or not Path(nome_arquivo_).is_file():
@@ -293,12 +296,12 @@ def le_seq_artigo(nome_arquivo_, acrescentar_=True):
 		planilha = workbook[PLANILHA_PADRAO]
 		coluna = 1
 		linha = 1
-		logging.debug("Linha: %d Valor:%s" % (linha, planilha.cell(row=linha, column=coluna).value))
+
 		while not planilha.cell(row=linha, column=coluna).value is None:
 			logging.debug("Linha: %d Valor:%s" % (linha, planilha.cell(row=linha, column=coluna).value))
 			linha += 1
 
-		seq_artigo = linha -1 # descontar o cabeçalho
+		seq_artigo = linha - 1  # descontar o cabeçalho
 
 	return seq_artigo
 
@@ -364,6 +367,7 @@ def main():
 
 	try:
 		sequencia = le_seq_artigo(args.artigos, args.acrescentar)
+		logging.debug("Sequencia: %d" %sequencia)
 		for posix_path_pdf in arquivos_pdfs:
 			conta_arquivo += 1
 
