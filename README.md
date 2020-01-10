@@ -7,5 +7,5 @@ python3 processa_dados_SBC.py
 
 #Exemplo para gerar arquivos com seções organizadas em diretórios
 
-for d in "ERRC_completos" "ERRC_resumos" "WRSEG_completos" "WRSEG_resumos"; do python3 processa_dados_SBC.py -d $d -s %d; done; 
+for d in "ERRC_completos" "ERRC_resumos" "WRSEG_completos" "WRSEG_resumos"; do python3 processa_dados_SBC.py -d $d -s $d; done; 
 
