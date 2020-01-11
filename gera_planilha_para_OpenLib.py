@@ -76,8 +76,7 @@ CAMPOS_SECOES = [
 
 CAMPOS_REFERENCIAS = [
 	"article",
-	"references",
-	"warning"
+	"references"
 ]
 
 
@@ -96,10 +95,6 @@ class Referencia(object):
 	def __init__(self, artigo_seq_, referencia_):
 		self.article = artigo_seq_
 		self.references = referencia_
-		self.warning = ""
-		if referencia_.count(" pages ") > 1:
-			self.warning = "count(' pages ') > 1"
-
 		# self.DOI = "" # TODO
 
 	def __str__(self):
@@ -210,7 +205,7 @@ class Artigo(object):
 
 				while True:
 
-					if linha == "\n" or linha == "":
+					if linha == "":
 						cont_null += 1
 						logging.debug("análise: linha nula -> pulando e contando... cont_null:%d" % cont_null)
 						linha = stri.readline().strip()
@@ -263,14 +258,20 @@ class Artigo(object):
 									break
 
 							# casos particulares; pode acontecer de duas duas referências não terem linhas em branco intermediárias
-							elif linha[0].isupper() and (".," in linha or " and " in linha ) and primeiro == False and not "pages" in linha and not "Proceedings" in referencia and not linha[0:4].upper() == "HTTP":
+							# porém, caso referência termine em ,' então a próxima linha é uma continuação
+							elif linha[0].isupper() and \
+									(".," in linha or " and " in linha ) and \
+									primeiro == False \
+									and not "pages" in linha and \
+									not "Proceedings" in referencia and \
+									not linha[0:4].upper() == "HTTP" and \
+								   (len(referencia) > 1 and referencia[-1] != ','):
 								logging.debug("\t\t análise: linha upper e com '.,'")
-
 								break
 
 							else:
 
-								if len(referencia)>1 and referencia[-1] == '-':
+								if len(referencia) > 1 and referencia[-1] == '-':
 									logging.debug("\t\t análise: linha com dados terminado com -" )
 									referencia = "%s%s" % (referencia[0:-1], linha)
 
@@ -489,6 +490,7 @@ def le_seq_artigo(nome_arquivo_, acrescentar_=True):
 		seq_artigo = linha - 1  # descontar o cabeçalho
 
 	return seq_artigo
+
 
 def main():
 	'''
