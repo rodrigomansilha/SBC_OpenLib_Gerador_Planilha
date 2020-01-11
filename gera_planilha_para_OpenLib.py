@@ -1,35 +1,38 @@
 #!/usr/bin/python3
-# -*- coding: iso-8859-15 -*-
+# -*- coding: utf-8 -*-
 
 __author__ = 'Rodrigo Mansilha'
 __email__ = 'mansilha@unipampa.edu.br'
 __version__ = '{0}.{0}.{1}'
-__credits__ = ['Comiss�o Local de Pesquisa (CLP) do Campus Alegrete da Univ. Federal do Pampa - Unipampa']
+__credits__ = ['Comissão Local de Pesquisa (CLP) do Campus Alegrete da Univ. Federal do Pampa - Unipampa']
 
 
 # Bibliotecas gerais
 import sys, os	# system
 import argparse # parse arguments
 import glob		# Unix style pathname pattern expansion
-import logging  # organizar sa�das em formato de log
+import logging  # organizar saídas em formato de log
 from pathlib import Path
+from io import StringIO
 
 # Outras bibliotecas
 from openpyxl import load_workbook, Workbook #ler e escrever arquivos em formato do Excel
 import bibtexparser #ler e escrever arquivos em formato bibtex   #pip3 install bibtexparser
+from tika import parser as tika_parser # ler texto de pdf
+
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.customization import convert_to_unicode
 
-# ARQUIVOS DE SA�DA
+# ARQUIVOS DE SAÍDA
 PLANILHA_ARTIGOS_PADRAO = "Artigos.xlsx"
 PLANILHA_AUTORES_PADRAO = "Autores.xlsx"
 PLANILHA_REFERENCIAS_PADRAO = "Referencias.xlsx"
-PLANILHA_SECOES_PADRAO = "Secoes.xlsx" # N�o utilizada
+PLANILHA_SECOES_PADRAO = "Secoes.xlsx" # Não utilizada
 
-# DIRET�RIO DE ENTRADA
+# DIRETÓRIO DE ENTRADA
 DIRETORIO_ENTRADA_PADRAO = "./papers"
 
-# CONFIGURA��ES PADR�O
+# CONFIGURAÇÕES PADRÃO
 LANGUAGE_PADRAO = "pt"
 SECAO_ABREV_PADRAO = "ART"
 AUTHOR_COUNTRY_PADRAO = "Brasil"
@@ -71,6 +74,12 @@ CAMPOS_SECOES = [
 	"sectionAbbrev"
 ]
 
+CAMPOS_REFERENCIAS = [
+	"article",
+	"references",
+	"warning"
+]
+
 
 class Secao(object):
 
@@ -84,12 +93,23 @@ class Secao(object):
 
 class Referencia(object):
 
-	def __init__(self, artigo_seq_, referencia_seq_):
-
+	def __init__(self, artigo_seq_, referencia_):
 		self.article = artigo_seq_
-		self.referencia_seq = referencia_seq_
-		self.reference = ""
-		self.DOI = ""
+		self.references = referencia_
+		self.warning = ""
+		if referencia_.count(" pages ") > 1:
+			self.warning = "count(' pages ') > 1"
+
+		# self.DOI = "" # TODO
+
+	def __str__(self):
+		msg = "\n"
+		msg += "\t\tReferência\n"
+		msg += "\t\t----------\n"
+		msg += "\t\t\tarticle: %d\n" % self.article
+		msg += "\t\t\treferences:%s\n" % self.references
+		msg += '\n'
+		return msg
 
 
 class Autor(object):
@@ -130,7 +150,7 @@ class Autor(object):
 
 class Artigo(object):
 
-	def __init__(self, language_, section_abbrev_, seq_, bib_database_= None):
+	def __init__(self, language_, section_abbrev_, seq_, bib_database_=None, pdf_text_=None):
 		self.seq = seq_
 		self.language = language_
 		self.sectionAbbrev = section_abbrev_
@@ -144,6 +164,144 @@ class Artigo(object):
 		self.fileLabel = ""
 		self.fileLink = ""
 		self.autores = []
+		self.referencias = []
+
+		logging.info("Artigo")
+		if not pdf_text_ is None:
+			#logging.debug("debug:'%s'"%pdf_text_)
+			achou = False
+			stri = StringIO(pdf_text_)
+			while True:
+				linha = stri.readline()
+				logging.debug(linha)
+				if linha == "Referências\n" or linha == "Referências Bibliográficas\n":
+					logging.info("achou linha Referências!")
+					achou = True
+					break
+
+				if not linha:
+					break
+
+			if not achou:
+				logging.info("não achou linha Referências!")
+				stri = StringIO(pdf_text_)
+				while True:
+					linha = stri.readline()
+					logging.debug(linha)
+					if linha == "Referências\n" or "Referências" in linha:
+						logging.info("achou linha Referências!")
+						achou = True
+						break
+
+					if not linha:
+						break
+
+			if not achou:
+				logging.error("ainda não achou linha Referências!")
+				sys.exit(-1)
+
+			else:
+				linha = stri.readline().strip()
+				logging.debug("linha_lida:'%s'" % linha)
+				referencia = ""
+				cont_ref = 0  # contador de referências
+				cont_null = 0  # contador de linhas nulas para rede de segurança; após 25 linhas nulas o algoritmo para.
+				primeiro = True  # variável de apoio para decidir sobre casos específico de referências mal formatadas
+
+				while True:
+
+					if linha == "\n" or linha == "":
+						cont_null += 1
+						logging.debug("análise: linha nula -> pulando e contando... cont_null:%d" % cont_null)
+						linha = stri.readline().strip()
+						logging.debug("linha_lida:'%s'" % linha)
+
+					else:
+						cont_null = 0  # linha não nula reinicia contador de linhas nulas
+
+						# laço para montar uma referência completa
+						while True:
+
+							if linha == "":
+								logging.debug("análise: linha nula -> pulando e contando... cont_null:%d" % cont_null)
+								cont_null += 1
+
+								linha = stri.readline().strip()
+								logging.debug("linha_lida:'%s'" % linha)
+
+								# nova linha em branco e a referência parece ter chegado ao fim
+								if referencia[-1] == '.':
+
+									if linha[0:2].upper() == "IN":
+										# trata-se de uma continuação, por exemplo:
+										# FERRARA, E.; Varol, O.; Davis, C; Menczer, F; Flammini, A. The rise of social bots.
+										# In: Communications of the ACM, v59, n.2, 2016.
+										pass
+
+									elif linha[0:7].upper() == "REVISTA":
+										# trata-se de uma continuação, por exemplo:
+										# SASTRE , Angelo; CORREIO , Claudia Silene Pereira de Oliveira;  CORREIO , Francisco Rolfsen Belda. A  influência do “filtro bolha” na difusão de  Fake News nas mídias sociais: reflexões sobre as mudanças nos  algoritmos do Facebook.
+										# Revista GEMInIS, São Carlos, UFSCar, v. 9, n. 1, pp.4-17, jan. / abr. 2018.
+										pass
+
+									elif linha[0:4].upper() == "HTTP":
+										# trata-se de uma continuação, por exemplo:
+										# CGEE (2012). Redes elétricas inteligentes: contexto naional.
+										# http://www.cgee.org.br/atividades/redirect/8050. Acessado em Outubro/2017.
+										pass
+
+									elif linha[0:11].upper() == "ACESSADO EM":
+										# trata-se de uma continuação, por exemplo:
+										# ....
+										# Acessado em Outubro/2017.
+										pass
+
+									else:
+										break
+
+								if cont_null > 25:
+									break
+
+							# casos particulares; pode acontecer de duas duas referências não terem linhas em branco intermediárias
+							elif linha[0].isupper() and (".," in linha or " and " in linha ) and primeiro == False and not "pages" in linha and not "Proceedings" in referencia and not linha[0:4].upper() == "HTTP":
+								logging.debug("\t\t análise: linha upper e com '.,'")
+
+								break
+
+							else:
+
+								if len(referencia)>1 and referencia[-1] == '-':
+									logging.debug("\t\t análise: linha com dados terminado com -" )
+									referencia = "%s%s" % (referencia[0:-1], linha)
+
+								else:
+									logging.debug("\t\t análise: linha com dados normal")
+									referencia = "%s %s" % (referencia, linha)
+
+								primeiro = False
+								logging.debug("\t\t referência_temporária:'%s" % referencia)
+
+								linha = stri.readline().strip()
+								logging.debug("linha_lida:'%s'" % linha)
+
+						cont_ref += 1
+
+						logging.info("\n cont_ref:%d referência_final:'%s'\n" %(cont_ref, referencia))
+
+						# teste de segurança																	''
+						if referencia != "":
+							referencia = referencia.strip()
+							self.referencias.append(Referencia(self.seq, referencia))
+
+						# reinicia variáveis de controle
+						referencia = ""
+						primeiro = True
+
+					if cont_null > 25:
+						break
+
+		#print(pdf_text_)
+		#sys.exit()
 
 		if not bib_database_ is None:
 			for attribute in self.__dict__.keys():
@@ -184,6 +342,9 @@ class Artigo(object):
 		for autor in self.autores:
 			msg += autor.__str__()
 		msg += '\n'
+		for referencia in self.referencias:
+			msg += referencia.__str__()
+		msg += '\n'
 		return msg
 
 
@@ -192,7 +353,7 @@ def exporta_artigos_xlsx(planilha_, artigos_, acrescentar_=True):
 	Preenche planilha de artigos com dados
 
 	:param planilha_: openpyxl.sheet
-	:param dados_detalhe_grupos_: dicion�rio com valores
+	:param dados_detalhe_grupos_: dicionário com valores
 	'''
 
 	linha = gera_cabecalho(planilha_, CAMPOS_ARTIGOS, 1)
@@ -207,12 +368,13 @@ def exporta_artigos_xlsx(planilha_, artigos_, acrescentar_=True):
 			coluna += 1
 		linha += 1
 
+
 def exporta_autores_xlsx(planilha_, artigos_, acrescentar_=True):
 	'''
 	Preenche planilha de autores com dados
 
 	:param planilha_: openpyxl.sheet
-	:param dados_detalhe_grupos_: dicion�rio com valores
+	:param dados_detalhe_grupos_: dicionário com valores
 	'''
 
 	linha = gera_cabecalho(planilha_, CAMPOS_AUTORES, 1)
@@ -229,9 +391,32 @@ def exporta_autores_xlsx(planilha_, artigos_, acrescentar_=True):
 				coluna += 1
 			linha += 1
 
+
+def exporta_referencias_xlsx(planilha_, artigos_, acrescentar_=True):
+	'''
+	Preenche planilha de autores com dados
+
+	:param planilha_: openpyxl.sheet
+	:param dados_detalhe_grupos_: dicionário com valores
+	'''
+
+	linha = gera_cabecalho(planilha_, CAMPOS_REFERENCIAS, 1)
+	coluna = 1
+
+	for artigo in artigos_:
+		for referencia in artigo.referencias:
+			coluna = 1
+
+			for campo in CAMPOS_REFERENCIAS:
+				valor = referencia.__getattribute__(campo)
+				planilha_.cell(row=linha, column=coluna).value = valor
+				logging.debug("artigo: %d campo: %s valor: %s" % (artigo.seq, campo, valor))
+				coluna += 1
+			linha += 1
+
 def exporta_secoes_xlsx(planilha_, secao_, acrescentar_=True):
 	'''
-	Exporta dados de se��o para planilha
+	Exporta dados de seção para planilha
 	:param planilha_:
 	:param secao_:
 	:param acrescentar_:
@@ -274,7 +459,7 @@ def gera_workbook_planilha(nome_arquivo_, acrescentar_=True):
 		logging.debug("pronto.")
 
 	if not Path(nome_arquivo_).is_file():
-		logging.debug("arquivo n�o existe! criando novo arquivo...")
+		logging.debug("arquivo não existe! criando novo arquivo...")
 		workbook = Workbook()
 		workbook.remove(workbook.active)
 		workbook.create_sheet(PLANILHA_PADRAO)
@@ -301,7 +486,7 @@ def le_seq_artigo(nome_arquivo_, acrescentar_=True):
 			logging.debug("Linha: %d Valor:%s" % (linha, planilha.cell(row=linha, column=coluna).value))
 			linha += 1
 
-		seq_artigo = linha - 1  # descontar o cabe�alho
+		seq_artigo = linha - 1  # descontar o cabeçalho
 
 	return seq_artigo
 
@@ -311,35 +496,35 @@ def main():
 	'''
 
 	# Configura argumentos
-	parser = argparse.ArgumentParser(description='Gera arquivos de produ��o bibliogr�fica de eventos da SBC.')
-	parser.add_argument("--dir", "-d", help="diret�rio com arquivos de entrada.", default=DIRETORIO_ENTRADA_PADRAO)
-	parser.add_argument("--secao", "-s", help="abreviatura da se��o a ser processada (coluna sectionAbbrev do arquivo Secoes.xlsx).", default=SECAO_ABREV_PADRAO)
-	parser.add_argument('--acrescentar', dest='acrescentar',  help="acrescentar aos arquivos pr�-existentes.", action='store_true', default=True)
-	parser.add_argument('--nao-acrescentar', dest='acrescentar', help="sobreescrever arquivos pr�-existentes.", action='store_false')
+	parser = argparse.ArgumentParser(description='Gera arquivos de produção bibliográfica de eventos da SBC.')
+	parser.add_argument("--dir", "-d", help="diretório com arquivos de entrada.", default=DIRETORIO_ENTRADA_PADRAO)
+	parser.add_argument("--secao", "-s", help="abreviatura da seção a ser processada (coluna sectionAbbrev do arquivo Secoes.xlsx).", default=SECAO_ABREV_PADRAO)
+	parser.add_argument('--acrescentar', dest='acrescentar',  help="acrescentar aos arquivos pré-existentes.", action='store_true', default=True)
+	parser.add_argument('--nao-acrescentar', dest='acrescentar', help="sobreescrever arquivos pré-existentes.", action='store_false')
 
-	parser.add_argument("--artigos", "-a", help="planilha de sa�da com artigos.", default=PLANILHA_ARTIGOS_PADRAO)
-	parser.add_argument("--autores", "-u", help="planilha de sa�da com autores.", default=PLANILHA_AUTORES_PADRAO)
-	parser.add_argument("--referencias", "-r", help="planilha de sa�da com refer�ncias.", default=PLANILHA_REFERENCIAS_PADRAO)
-	parser.add_argument("--secoes", "-e", help="planilha de sa�da com se��es.", default=PLANILHA_SECOES_PADRAO)
+	parser.add_argument("--artigos", "-a", help="planilha de saída com artigos.", default=PLANILHA_ARTIGOS_PADRAO)
+	parser.add_argument("--autores", "-u", help="planilha de saída com autores.", default=PLANILHA_AUTORES_PADRAO)
+	parser.add_argument("--referencias", "-r", help="planilha de saída com referências.", default=PLANILHA_REFERENCIAS_PADRAO)
+	parser.add_argument("--secoes", "-e", help="planilha de saída com seções.", default=PLANILHA_SECOES_PADRAO)
 
-	help_log = "n�vel de log (INFO=%d DEBUG=%d)"%(logging.INFO, logging.DEBUG)
+	help_log = "nível de log (INFO=%d DEBUG=%d)"%(logging.INFO, logging.DEBUG)
 	parser.add_argument("--log", "-l", help=help_log, default=logging.INFO, type=int)
 	parser.print_help()
 
-	# l� argumentos da linha de comando
+	# lê argumentos da linha de comando
 	args = parser.parse_args()
 
 	# configura log
 	#logging.basicConfig(level=args.log, format='%(asctime)s - %(message)s')
 	logging.basicConfig(level=args.log, format='%(message)s')
 
-	# mostra par�metros de entrada
+	# mostra parâmetros de entrada
 	logging.info("")
-	logging.info("PAR�METROS DE ENTRADA")
+	logging.info("PARÂMETROS DE ENTRADA")
 	logging.info("---------------------")
 
 	logging.info("\tdir        : %s" % args.dir)
-	logging.info("\tse��o      : %s" % args.secao)
+	logging.info("\tseção      : %s" % args.secao)
 	logging.info("\tartigos    : %s" % args.artigos)
 	logging.info("\tautores    : %s" % args.autores)
 	logging.info("\treferencias: %s" % args.referencias)
@@ -348,15 +533,15 @@ def main():
 	logging.info("\tlog        : %d" % args.log)
 	logging.info("\tacrescentar: %s" % args.acrescentar)
 
-	# mostra par�metros calculados
+	# mostra parâmetros calculados
 	logging.info("")
-	logging.info("PAR�METROS CALCULADOS")
+	logging.info("PARÂMETROS CALCULADOS")
 	logging.info("---------------------")
 
 	arquivos_pdfs = [arquivo for arquivo in Path(args.dir).rglob('[!~]*.pdf')]
 	logging.info("\tpdfs       : %s" % arquivos_pdfs)
 
-	# inicializa vari�veris
+	# inicializa variáveris
 	artigos = []
 	conta_arquivo = 0
 
@@ -380,19 +565,27 @@ def main():
 				logging.info("\t(%d/%d) PDF:%s [OK] BIB:%s [OK]"%(conta_arquivo, len(arquivos_pdfs), nome_arquivo_pdf, nome_arquivo_bib))
 
 			try:
-				parser = BibTexParser()
-				parser.customization = convert_to_unicode
+				#pdf_texto = pdf_to_text(nome_arquivo_pdf)
+				#print(pdf_texto)
+
+				pdf_dados = tika_parser.from_file(nome_arquivo_pdf)
+				pdf_texto = pdf_dados['content']
+				#pdf_texto = pdf_texto.encode('utf-8', errors='ignore')
+
+				bib_text_parser = BibTexParser()
+				bib_text_parser.customization = convert_to_unicode
 				bibtex_file = open(nome_arquivo_bib)
-				bib_database = bibtexparser.load(bibtex_file, parser=parser)
-				artigo = Artigo(LANGUAGE_PADRAO, args.secao, sequencia, bib_database)
+				bib_database = bibtexparser.load(bibtex_file, parser=bib_text_parser)
+				artigo = Artigo(LANGUAGE_PADRAO, args.secao, sequencia, bib_database, pdf_texto)
 				sequencia += 1
 				logging.info(artigo)
 				artigos.append(artigo)
 
 			except Exception as e:
 				print(e)
-				artigo = Artigo(LANGUAGE_PADRAO, args.secao)
-				artigos.append(artigo)
+				sys.exit(-1)
+				#artigo = Artigo(LANGUAGE_PADRAO, args.secao, sequencia)
+				#artigos.append(artigo)
 
 	except Exception as e:
 		print(e)
@@ -404,7 +597,7 @@ def main():
 	logging.info("----------")
 
 	logging.info("")
-	logging.info("\tSE��O")
+	logging.info("\tSEÇÃO")
 	logging.info("\t-----")
 	logging.info("\t\tprocessando...")
 	workbook, planilha = gera_workbook_planilha(args.secoes, args.acrescentar)
@@ -433,6 +626,19 @@ def main():
 	logging.info("\t\tgravando...")
 	workbook.save(args.autores)
 	logging.info("\t\tpronto.")
+
+	logging.info("")
+	logging.info("\tREFERÊNCIAS")
+	logging.info("\t-----------")
+	logging.info("\t\tprocessando...")
+	workbook, planilha = gera_workbook_planilha(args.referencias, args.acrescentar)
+	exporta_referencias_xlsx(planilha, artigos)
+	logging.info("\t\tgravando...")
+	workbook.save(args.referencias)
+	logging.info("\t\tpronto.")
+
+
+
 
 	logging.info("\nfim.\n")
 
