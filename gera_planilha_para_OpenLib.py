@@ -145,7 +145,7 @@ class Autor(object):
 
 class Artigo(object):
 
-	def __init__(self, language_, section_abbrev_, seq_, bib_database_=None, pdf_text_=None):
+	def __init__(self, language_, section_abbrev_, seq_, bib_database_=None, pdf_text_=None, pdf_file_name_=None):
 		self.seq = seq_
 		self.language = language_
 		self.sectionAbbrev = section_abbrev_
@@ -161,11 +161,77 @@ class Artigo(object):
 		self.autores = []
 		self.referencias = []
 
+		titulo = ""
+		autores = ""
 		logging.info("Artigo")
 		if not pdf_text_ is None:
 			#logging.debug("debug:'%s'"%pdf_text_)
 			achou = False
 			stri = StringIO(pdf_text_)
+
+			# busca pelo título (presume-se que a primeira linha é o título)
+			linha = stri.readline().strip()
+			while linha == "" or "SIBGRAPI" in linha:
+				# alguns pdfs abrem com a informação "Instruções aos Autores de Contribuições para o SIBGRAPI "
+				linha = stri.readline().strip()
+				logging.info("\tlinha1: {}".format(linha))
+
+			# for i in range(10):
+			# 	linha = stri.readline()
+			# 	print("linha {}: {}".format(i, linha))
+			#sys.exit()
+			titulo = linha
+			# incorpora as próximas linhas não nulas para os casos de títulos em múltiplas linhas
+			while linha != "" and not linha[-1].isnumeric() and not linha[-2].isnumeric():
+				linha = stri.readline().strip()
+				logging.info("\tlinha2.1: {}".format(linha))
+				if len(linha) > 0:
+					if not linha[-1].isnumeric() and not linha[-2].isnumeric():
+						titulo += " " + linha
+					else:
+						break
+
+				linha = stri.readline().strip()
+				logging.info("\tlinha2.2: {}".format(linha))
+				if len(linha) > 0:
+					if not linha[-1].isnumeric() and not linha[-2].isnumeric():
+						titulo += linha
+					else:
+						break
+
+			logging.info("Título: {}".format(titulo))
+
+			# busca linha dos autores
+			while linha == "":
+				linha = stri.readline().strip()
+				logging.info("\tlinha3: {}".format(linha))
+
+			autores = linha
+			# caso de autores em múltiplas linhas
+			while linha != "" and not linha[1].isnumeric() :
+				linha = stri.readline().strip()
+				logging.info("\tlinha4.1: {}".format(linha))
+				if not "Instituto" in linha and not "Univ" in linha and not " RS"  in linha and not " SC"  in linha:
+					autores += " " + linha
+
+				linha = stri.readline().strip()
+				logging.info("\tlinha4.2: {}".format(linha))
+
+			logging.info("Autores antes processamento: {}".format(autores))
+			# remove supperscript para instituição (superestimado até 30 instituições)
+			for i in range(30):
+				autores = autores.replace("%d"%i,"")
+				autores = autores.replace(",,", ",")
+				# alguns autores usam 'e' como separador ao invés de ','
+				autores = autores.replace(" e ", ", ")
+				autores = autores.replace(" and ", ", ")
+			autores = autores.strip()
+			# remove última virgula, caso necessário
+			if autores[-1] == ",":
+				autores = autores[:-1]
+			logging.info("Autores após processamento: {}".format(autores))
+
+			#sys.exit()
 			while True:
 				linha = stri.readline()
 				logging.debug(linha)
@@ -183,7 +249,7 @@ class Artigo(object):
 				while True:
 					linha = stri.readline()
 					logging.debug(linha)
-					if linha == "Referências\n" or "Referências" in linha:
+					if linha == "Referências\n" or "Referências" or "References" in linha:
 						logging.info("achou linha Referências!")
 						achou = True
 						break
@@ -204,6 +270,8 @@ class Artigo(object):
 				primeiro = True  # variável de apoio para decidir sobre casos específico de referências mal formatadas
 
 				while True:
+					if "Introdução" in linha:
+						pass
 
 					if linha == "":
 						cont_null += 1
@@ -245,10 +313,33 @@ class Artigo(object):
 										# http://www.cgee.org.br/atividades/redirect/8050. Acessado em Outubro/2017.
 										pass
 
+									elif linha[0:3].upper() == "ED.":
+										# Kurose, J. F. (2013). Redes de Computadores e a Internet: uma abordagem topdown. 6.
+										# ed. São Paulo: Editora Pearson.
+										pass
+
 									elif linha[0:11].upper() == "ACESSADO EM":
 										# trata-se de uma continuação, por exemplo:
 										# ....
 										# Acessado em Outubro/2017.
+										pass
+
+									elif linha[0:9].upper() == "ACESSO EM":
+										# trata-se de uma continuação, por exemplo:
+										# Sophos XG. (2017). Disponível em: https://www.m3corp.com.br/sophos/sophos-utm-2.
+										# Acesso em: 26/06/2019 Sophos. (2017). Disponível em: <https://www.sophos.com/en-us.aspx. Acesso em: 26/06/2019 Turban, E.; Volonino, L. (2013). Tecnologia da Informação para Gestão: Em busca do melhor desempenho Estratégico e Operacional. 8ed. Porto Alegre: Bookman. 721 p.
+										pass
+
+									elif linha[0:11].upper() == "DISSERTACAO" or linha[0:11].upper() == "DISSERTAÇÃO":
+										# trata-se de uma continuação, por exemplo:
+										# Panes, G. G. (2011). Firewall Dinâmico: Uma implementação Cliente/Servidor.
+										# Dissertação de Mestrado, Pós-Graduação em Ciência da Computação, 72p.
+										pass
+
+									elif linha[0:10].upper() == "DISPONIVEL":
+										# trata-se de uma continuação, por exemplo:
+										# Bär, H. (2017). 4 vulnerabilidades que mais afetam a segurança da informação.
+										# Disponivel em: https://triplait.com/4-vulnerabilidades-que-mais-afetam-a-segurancada-informacao. Acesso em:  25/05/2019.
 										pass
 
 									else:
@@ -257,27 +348,46 @@ class Artigo(object):
 								if cont_null > 25:
 									break
 
+							# HACK para um caso particular
+							# TODO: generalizar solução
+							elif (len(linha) > 9 and "Turban, E." == linha[0:10]):
+								logging.debug("\t\t análise: referência nova após referência sem ponto.")
+								referencia = "%s." % referencia
+								linha = " %s" % linha
+								#linha = stri.readline().strip()
+								#logging.debug("linha_lida:'%s'" % linha)
+								break
+
 							# casos particulares; pode acontecer de duas duas referências não terem linhas em branco intermediárias
-							# porém, caso referência termine em ,' então a próxima linha é uma continuação
+							# a menos que a referência atual termine em ',' ou ':' e então a próxima linha é uma continuação
 							elif linha[0].isupper() and \
 									(".," in linha or " and " in linha ) and \
 									primeiro == False \
 									and not "pages" in linha and \
 									not "Proceedings" in referencia and \
 									not linha[0:4].upper() == "HTTP" and \
-								   (len(referencia) > 1 and referencia[-1] != ','):
+									not linha[0:10].upper() == "DISPONIVEL" and \
+									not linha[0:10].upper() == "DISPONÍVEL" and \
+									not linha[0:11].upper() == "DISSERTACAO" and \
+									not linha[0:11].upper() == "DISSERTAÇÃO" and \
+									not linha[0:11].upper() == "ACESSADO EM" and \
+									not linha[0:9].upper() == "ACESSO EM" and \
+									(len(referencia) > 1 and referencia[-1] != ',') and \
+								    (len(referencia) > 1 and referencia[-1] != ':') and \
+								    (len(referencia) > 1 and referencia[-1] == '.') :
 								logging.debug("\t\t análise: linha upper e com '.,'")
+
 								break
 
 							else:
 
 								if len(referencia) > 1 and referencia[-1] == '-':
 									logging.debug("\t\t análise: linha com dados terminado com -" )
-									referencia = "%s%s" % (referencia[0:-1], linha)
+									referencia = "%s%s" % (referencia[0:-1], linha.strip())
 
 								else:
 									logging.debug("\t\t análise: linha com dados normal")
-									referencia = "%s %s" % (referencia, linha)
+									referencia = "%s %s" % (referencia, linha.strip())
 
 								primeiro = False
 								logging.debug("\t\t referência_temporária:'%s" % referencia)
@@ -291,8 +401,12 @@ class Artigo(object):
 
 						# teste de segurança																	''
 						if referencia != "":
-							referencia = referencia.strip()
-							self.referencias.append(Referencia(self.seq, referencia))
+							if "1. Introdução" in referencia and "Referência" in referencia:
+								# evitar alguns casos especiais onde a estrutura do artigo aparece após referências
+								pass
+							else:
+								referencia = referencia.strip()
+								self.referencias.append(Referencia(self.seq, referencia))
 
 						# reinicia variáveis de controle
 						referencia = ""
@@ -304,6 +418,7 @@ class Artigo(object):
 		#print(pdf_text_)
 		#sys.exit()
 
+		self.fileLink = os.path.basename(pdf_file_name_)
 		if not bib_database_ is None:
 			for attribute in self.__dict__.keys():
 				if attribute in bib_database_.entries[0]:
@@ -313,8 +428,8 @@ class Artigo(object):
 				else:
 					logging.debug("Attribute: %s [MISS]" % attribute)
 
-			self.fileLink = bib_database_.entries[0]["url"]
-
+			#link não é necessário, será gerado pelo sistema OpenLib
+			#self.fileLink = bib_database_.entries[0]["url"]
 			conta_autor = 0
 			autores_lista = bib_database_.entries[0]["author"].split(" and ")
 			logging.debug(autores_lista)
@@ -325,6 +440,20 @@ class Artigo(object):
 				autor = Autor(self.seq, autor_str)
 				logging.debug(autor)
 				self.autores.append(autor)
+		else:
+			self.title = titulo
+			conta_autor = 0
+			autores_lista = autores.split(",")
+			logging.info(autores_lista)
+			for autor_str in autores_lista:
+				conta_autor += 1
+				autor_str = autor_str.strip()
+				logging.info("\t\t(%d/%d) %s" % (conta_autor, len(autores_lista), autor_str))
+				autor = Autor(self.seq, autor_str)
+				logging.debug(autor)
+				self.autores.append(autor)
+
+
 
 
 	def __str__(self):
@@ -500,7 +629,7 @@ def main():
 	# Configura argumentos
 	parser = argparse.ArgumentParser(description='Gera arquivos de produção bibliográfica de eventos da SBC.')
 	parser.add_argument("--dir", "-d", help="diretório com arquivos de entrada.", default=DIRETORIO_ENTRADA_PADRAO)
-	parser.add_argument("--secao", "-s", help="abreviatura da seção a ser processada (coluna sectionAbbrev do arquivo Secoes.xlsx).", default=SECAO_ABREV_PADRAO)
+	parser.add_argument("--secao", "-s", help="abreviatura da seção a ser processada (coluna sectionAbbrev do arquivo Secoes.xlsx), padrão: diretório de entrada.", default=None)
 	parser.add_argument('--acrescentar', dest='acrescentar',  help="acrescentar aos arquivos pré-existentes.", action='store_true', default=True)
 	parser.add_argument('--nao-acrescentar', dest='acrescentar', help="sobreescrever arquivos pré-existentes.", action='store_false')
 
@@ -515,7 +644,9 @@ def main():
 
 	# lê argumentos da linha de comando
 	args = parser.parse_args()
-
+	if args.secao is None:
+		args.secao = args.dir
+		
 	# configura log
 	#logging.basicConfig(level=args.log, format='%(asctime)s - %(message)s')
 	logging.basicConfig(level=args.log, format='%(message)s')
@@ -560,25 +691,31 @@ def main():
 
 			nome_arquivo_pdf = str(posix_path_pdf)
 			nome_arquivo_bib = nome_arquivo_pdf.replace(".pdf", ".bib")
-			if not Path(nome_arquivo_bib).is_file:
+
+			bib_database = None
+			if not os.path.isfile(nome_arquivo_bib):
 				logging.exception("\t(%d/%d) PDF:%s [OK] BIB:%s [NOT FOUND] " % (conta_arquivo, len(arquivos_pdfs), nome_arquivo_pdf, nome_arquivo_bib))
 
 			else:
 				logging.info("\t(%d/%d) PDF:%s [OK] BIB:%s [OK]"%(conta_arquivo, len(arquivos_pdfs), nome_arquivo_pdf, nome_arquivo_bib))
+
+				bib_text_parser = BibTexParser()
+				bib_text_parser.customization = convert_to_unicode
+				bibtex_file = open(nome_arquivo_bib)
+				bib_database = bibtexparser.load(bibtex_file, parser=bib_text_parser)
 
 			try:
 				#pdf_texto = pdf_to_text(nome_arquivo_pdf)
 				#print(pdf_texto)
 
 				pdf_dados = tika_parser.from_file(nome_arquivo_pdf)
+
 				pdf_texto = pdf_dados['content']
+				#print("Title: {}".format(pdf_dados['tile']))
+				#print("Authors: {}".format(pdf_dados['author']))
 				#pdf_texto = pdf_texto.encode('utf-8', errors='ignore')
 
-				bib_text_parser = BibTexParser()
-				bib_text_parser.customization = convert_to_unicode
-				bibtex_file = open(nome_arquivo_bib)
-				bib_database = bibtexparser.load(bibtex_file, parser=bib_text_parser)
-				artigo = Artigo(LANGUAGE_PADRAO, args.secao, sequencia, bib_database, pdf_texto)
+				artigo = Artigo(LANGUAGE_PADRAO, args.secao, sequencia, bib_database, pdf_texto, nome_arquivo_pdf)
 				sequencia += 1
 				logging.info(artigo)
 				artigos.append(artigo)
