@@ -672,6 +672,7 @@ def main():
 	logging.info("---------------------")
 
 	arquivos_pdfs = [arquivo for arquivo in Path(args.dir).rglob('[!~]*.pdf')]
+	arquivos_pdfs = sorted(arquivos_pdfs)
 	logging.info("\tpdfs       : %s" % arquivos_pdfs)
 
 	# inicializa variáveris
